@@ -1,19 +1,30 @@
 import { Entry, User } from "@/types";
 import { useAuthStore } from "@/store/useAuthStore";
 
-// Helper to get headers with token
+// Headers are now simpler as cookie is handled by browser
 const getHeaders = () => {
-  const token = useAuthStore.getState().token;
   return {
     "Content-Type": "application/json",
-    Authorization: token ? `Bearer ${token}` : "",
   };
+};
+
+export const checkSession = async (): Promise<User | null> => {
+  try {
+    const res = await fetch("/api/auth/me");
+    if (res.ok) {
+      const data = await res.json();
+      return data.user;
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
 };
 
 export const login = async (
   email: string,
   password: string
-): Promise<{ user: User; token: string }> => {
+): Promise<{ user: User }> => {
   const res = await fetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -26,11 +37,15 @@ export const login = async (
   return res.json();
 };
 
+export const logout = async (): Promise<void> => {
+  await fetch("/api/auth/logout", { method: "POST" });
+};
+
 export const register = async (
   email: string,
   password: string,
   name: string
-): Promise<{ user: User; token: string }> => {
+): Promise<{ user: User }> => {
   const res = await fetch("/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

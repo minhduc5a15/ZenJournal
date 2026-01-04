@@ -13,10 +13,9 @@ import { cn } from '@/lib/utils';
 
 // Helper to get headers with token
 const fetcher = async (url: string): Promise<Entry[]> => {
-    const token = useAuthStore.getState().token;
     const res = await fetch(url, {
         headers: {
-            'Authorization': token ? `Bearer ${token}` : '',
+            'Content-Type': 'application/json',
         }
     });
     if (!res.ok) {

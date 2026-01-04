@@ -1,6 +1,6 @@
 "use client";
 
-import { FC, useState } from "react";
+import { FC, useState, useEffect } from "react";
 import { BookOpen, LogOut, Plus, Sparkles, Menu, X } from "lucide-react";
 import { useAuthStore } from "@/store/useAuthStore";
 import { useRouter, usePathname } from "next/navigation";
@@ -8,18 +8,27 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn, getGreeting } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
+import { checkSession, logout as apiLogout } from "@/services/api";
+import { Toaster } from "sonner";
 
 interface LayoutProps {
   children: React.ReactNode;
 }
 
 export const AppLayout: FC<LayoutProps> = ({ children }) => {
-  const { user, logout } = useAuthStore();
+  const { user, logout, setUser } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleLogout = () => {
+  useEffect(() => {
+    checkSession().then((user) => {
+      setUser(user);
+    });
+  }, [setUser]);
+
+  const handleLogout = async () => {
+    await apiLogout();
     logout();
     router.push("/login");
   };
@@ -27,10 +36,16 @@ export const AppLayout: FC<LayoutProps> = ({ children }) => {
   const isLoginPage = pathname === "/login";
 
   // If on login page, render a simplified layout or just children
-  if (isLoginPage) return <>{children}</>;
+  if (isLoginPage) return (
+    <>
+      {children}
+      <Toaster />
+    </>
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FDFCF8] dark:bg-stone-950 text-stone-800 dark:text-stone-100 selection:bg-rose-100 dark:selection:bg-rose-900 selection:text-rose-900 dark:selection:text-rose-100 transition-colors duration-300">
+      <Toaster />
       {/* Background Texture/Gradient */}
       <div
         className="fixed inset-0 pointer-events-none z-[-1] opacity-40 dark:opacity-20"

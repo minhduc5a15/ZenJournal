@@ -24,10 +24,10 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const { user, token } = isRegister 
+      const { user } = isRegister 
         ? await register(email, password, name)
         : await login(email, password);
-      storeLogin(user, token);
+      storeLogin(user);
       router.push('/');
     } catch (err: unknown) {
       setError((err instanceof Error) ? err.message : 'Authentication failed. Please check your credentials.');

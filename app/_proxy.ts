@@ -3,41 +3,37 @@ import type { NextRequest } from "next/server";
 import { verifyJWT } from "@/lib/auth";
 
 export async function middleware(request: NextRequest) {
-  // Only protect /api/entries/*
-  if (request.nextUrl.pathname.startsWith("/api/entries")) {
-    const authHeader = request.headers.get("authorization");
-    const token = authHeader?.split(" ")[1];
+  const { pathname } = request.nextUrl;
+  
+  // Public paths that don't require auth
+  const isPublicPath = pathname === "/login" || pathname === "/register";
+  
+  // Protected paths
+  // We protect /entry/* and the dashboard / (though dashboard handles empty state, strict protection is maybe better, but let's stick to prompt requirements)
+  // The prompt asked to fix security. Preventing access to /entry/* is key.
+  const isProtectedPath = pathname.startsWith("/entry");
 
-    if (!token) {
-      return NextResponse.json(
-        { error: "Unauthorized: No token provided" },
-        { status: 401 }
-      );
-    }
+  const token = request.cookies.get("token")?.value || "";
+  const payload = token ? await verifyJWT(token) : null;
 
-    const payload = await verifyJWT(token);
+  // If trying to access protected route without valid token
+  if (isProtectedPath && !payload) {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
 
-    if (!payload) {
-      return NextResponse.json(
-        { error: "Unauthorized: Invalid token" },
-        { status: 401 }
-      );
-    }
-
-    // Add user info to headers for downstream handlers (optional, but useful)
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-user-id", payload.sub as string);
-
-    return NextResponse.next({
-      request: {
-        headers: requestHeaders,
-      },
-    });
+  // If trying to access login/register with valid token
+  if (isPublicPath && payload) {
+    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: "/api/entries/:path*",
+  matcher: [
+    "/",
+    "/login",
+    "/register",
+    "/entry/:path*",
+  ],
 };

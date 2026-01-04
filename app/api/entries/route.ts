@@ -1,21 +1,27 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import dbConnect from "@/lib/db";
 import Entry from "@/models/Entry";
+import { verifyJWT } from "@/lib/auth";
 
 export async function GET(request: Request) {
   await dbConnect();
+  
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
+  const payload = token ? await verifyJWT(token) : null;
+
+  if (!payload) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
 
   const search = searchParams.get("search");
   const mood = searchParams.get("mood");
   const tag = searchParams.get("tag");
-  const userId = searchParams.get("userId");
 
-  let query: any = {};
-
-  if (userId) {
-    query.userId = userId;
-  }
+  let query: any = { userId: payload.sub };
 
   if (search) {
     query.$or = [
@@ -32,7 +38,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   await dbConnect();
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
+  const payload = token ? await verifyJWT(token) : null;
+
+  if (!payload) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
-  const entry = await Entry.create(body);
+  const entry = await Entry.create({ ...body, userId: payload.sub });
   return NextResponse.json(entry);
 }

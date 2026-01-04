@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import dbConnect from "@/lib/db";
 import Entry from "@/models/Entry";
+import { verifyJWT } from "@/lib/auth";
 
 export async function GET(
   request: Request,
@@ -8,7 +10,16 @@ export async function GET(
 ) {
   await dbConnect();
   const { id } = await params;
-  const entry = await Entry.findById(id);
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
+  const payload = token ? await verifyJWT(token) : null;
+
+  if (!payload) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const entry = await Entry.findOne({ _id: id, userId: payload.sub });
   if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(entry);
 }
@@ -19,8 +30,24 @@ export async function PUT(
 ) {
   await dbConnect();
   const { id } = await params;
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
+  const payload = token ? await verifyJWT(token) : null;
+
+  if (!payload) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await request.json();
-  const entry = await Entry.findByIdAndUpdate(id, body, { new: true });
+  // Ensure we don't overwrite userId
+  delete body.userId;
+  
+  const entry = await Entry.findOneAndUpdate(
+    { _id: id, userId: payload.sub },
+    body,
+    { new: true }
+  );
   if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(entry);
 }
@@ -31,6 +58,17 @@ export async function DELETE(
 ) {
   await dbConnect();
   const { id } = await params;
-  await Entry.findByIdAndDelete(id);
+
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
+  const payload = token ? await verifyJWT(token) : null;
+
+  if (!payload) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const entry = await Entry.findOneAndDelete({ _id: id, userId: payload.sub });
+  if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  
   return NextResponse.json({ success: true });
 }
