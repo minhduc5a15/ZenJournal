@@ -10,6 +10,7 @@ import {
 } from "@/services/api";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSanitize from 'rehype-sanitize';
 import { Clock, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
@@ -79,8 +80,13 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
       else await createEntry(entryData);
       toast.success("Entry saved successfully");
       router.push("/");
-    } catch (e) {
-      toast.error("Failed to save entry");
+    } catch (e: any) {
+        // Handle Validation Errors
+        if (e.message) {
+            toast.error(e.message);
+        } else {
+            toast.error("Failed to save entry");
+        }
     } finally {
       setSaving(false);
     }
@@ -178,7 +184,10 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
                   />
               ) : (
                   <div className="prose prose-stone dark:prose-invert prose-lg max-w-none font-serif leading-loose text-stone-700 dark:text-stone-300">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeSanitize]}
+                      >
                           {formData.content || "*Nothing to preview*"}
                       </ReactMarkdown>
                   </div>
