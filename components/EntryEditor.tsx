@@ -11,7 +11,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { Clock, AlertTriangle, CheckCircle2, Loader2, Save } from "lucide-react";
+import { Clock, AlertTriangle, CheckCircle2, Loader2, Save, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { formatDate, cn } from "@/lib/utils";
@@ -36,6 +36,7 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
+  const [autoSaveError, setAutoSaveError] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -83,7 +84,10 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
     if (!user) return;
 
     if (isManual) setSaving(true);
-    else setIsAutoSaving(true);
+    else {
+        setIsAutoSaving(true);
+        setAutoSaveError(false);
+    }
 
     try {
       const entryData = { ...formData, userId: user._id };
@@ -94,8 +98,8 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
       } else {
         savedEntry = await createEntry(entryData);
         currentEntryIdRef.current = savedEntry._id;
-        // Update URL without refreshing to reflect new entry ID
-        window.history.replaceState(null, "", `/entry/${savedEntry._id}`);
+        // Keep Next.js router in sync
+        router.replace(`/entry/${savedEntry._id}`, { scroll: false });
       }
       
       setLastSaved(new Date());
@@ -106,6 +110,11 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
     } catch (e: any) {
       if (isManual) {
         toast.error(e.message || "Failed to save entry");
+      } else {
+        setAutoSaveError(true);
+        toast.error("Could not auto-save entry", {
+            description: "Your changes might not be saved. Please check your connection."
+        });
       }
       console.error("Save error:", e);
     } finally {
@@ -206,6 +215,11 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
                   <div className="flex items-center gap-1.5 text-amber-500 dark:text-amber-400">
                     <Loader2 className="w-3 h-3 animate-spin" />
                     <span>Saving...</span>
+                  </div>
+                ) : autoSaveError ? (
+                  <div className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                    <XCircle className="w-3 h-3" />
+                    <span>Save Failed</span>
                   </div>
                 ) : lastSaved ? (
                   <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 opacity-80">

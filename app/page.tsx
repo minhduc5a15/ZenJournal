@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import useSWR from "swr";
 import { Entry, Mood } from "@/types";
 import { EntryCard } from "@/components/EntryCard";
@@ -44,12 +44,22 @@ export default function Dashboard() {
   const { user } = useAuthStore();
   const [showFilters, setShowFilters] = useState(false);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [mood, setMood] = useState<Mood | "">("");
   const [page, setPage] = useState(1);
 
+  // Search Debounce Logic
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const queryParams = new URLSearchParams();
   if (user) queryParams.set("userId", user._id);
-  if (search) queryParams.set("search", search);
+  if (debouncedSearch) queryParams.set("search", debouncedSearch);
   if (mood) queryParams.set("mood", mood);
   queryParams.set("page", page.toString());
   queryParams.set("limit", "10");
@@ -97,7 +107,7 @@ export default function Dashboard() {
     );
   }
 
-  const hasActiveFilters = search || mood;
+  const hasActiveFilters = debouncedSearch || mood;
 
   return (
     <div className="space-y-8 sm:space-y-12">

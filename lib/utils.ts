@@ -20,3 +20,11 @@ export function getGreeting() {
   if (hour < 18) return "Good afternoon";
   return "Good evening";
 }
+
+/**
+ * Escapes special characters in a string for use in a regular expression.
+ * Prevents Regex Denial of Service (ReDoS) by ensuring user input is treated as literal.
+ */
+export function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\\]/g, "\\$& ");
+}

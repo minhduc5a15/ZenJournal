@@ -5,6 +5,7 @@ import Entry from "@/models/Entry";
 import { verifyJWT } from "@/lib/auth";
 import { z } from "zod";
 import { Mood, Visibility } from "@/types";
+import { escapeRegExp } from "@/lib/utils";
 
 // Defined a proper interface for the Mongoose query to ensure type safety
 interface EntryQuery {
@@ -53,9 +54,10 @@ export async function GET(request: Request) {
   const query: EntryQuery = { userId: payload.sub };
 
   if (search) {
+    const escapedSearch = escapeRegExp(search);
     query.$or = [
-      { title: { $regex: search, $options: "i" } },
-      { content: { $regex: search, $options: "i" } },
+      { title: { $regex: escapedSearch, $options: "i" } },
+      { content: { $regex: escapedSearch, $options: "i" } },
     ];
   }
   
