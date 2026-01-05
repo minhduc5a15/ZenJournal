@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AppLayout } from '@/components/AppLayout';
 import { ThemeProvider } from '@/components/ThemeProvider';
+import { AuthProvider } from '@/components/AuthProvider';
+import { Toaster } from 'sonner';
 
 export const metadata: Metadata = {
   title: 'ZenJournal',
@@ -15,14 +17,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body className="antialiased">
           <ThemeProvider
             attribute="class"
             defaultTheme="dark"
             enableSystem
             disableTransitionOnChange
           >
-            <AppLayout>{children}</AppLayout>
+            <AuthProvider>
+              <AppLayout>{children}</AppLayout>
+              <Toaster position="bottom-right" richColors />
+            </AuthProvider>
           </ThemeProvider>
       </body>
     </html>

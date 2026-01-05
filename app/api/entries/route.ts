@@ -6,6 +6,17 @@ import { verifyJWT } from "@/lib/auth";
 import { z } from "zod";
 import { Mood, Visibility } from "@/types";
 
+// Defined a proper interface for the Mongoose query to ensure type safety
+interface EntryQuery {
+  userId: string;
+  mood?: string;
+  tags?: string;
+  $or?: Array<{
+    title?: { $regex: string; $options: string };
+    content?: { $regex: string; $options: string };
+  }>;
+}
+
 // Zod Schema for Entry Validation
 const createEntrySchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Title must be less than 100 characters"),
@@ -38,7 +49,8 @@ export async function GET(request: Request) {
   const limit = parseInt(searchParams.get("limit") || "10");
   const skip = (page - 1) * limit;
 
-  let query: any = { userId: payload.sub };
+  // Using the defined interface instead of 'any'
+  const query: EntryQuery = { userId: payload.sub };
 
   if (search) {
     query.$or = [
@@ -46,6 +58,7 @@ export async function GET(request: Request) {
       { content: { $regex: search, $options: "i" } },
     ];
   }
+  
   if (mood) query.mood = mood;
   if (tag) query.tags = tag;
 
@@ -54,7 +67,8 @@ export async function GET(request: Request) {
     Entry.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit),
+      .limit(limit)
+      .lean(),
     Entry.countDocuments(query)
   ]);
 

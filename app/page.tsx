@@ -4,28 +4,39 @@ import { useState } from "react";
 import useSWR from "swr";
 import { Entry, Mood } from "@/types";
 import { EntryCard } from "@/components/EntryCard";
-import { Search, Loader2, Filter, X, Plus } from "lucide-react";
+import { Search, Loader2, Filter, X, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
-// Helper to get headers with token
-const fetcher = async (url: string): Promise<Entry[]> => {
+type PaginatedResponse<T> = {
+  data: T[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+  };
+};
+
+// Updated fetcher to return the full paginated object
+const fetcher = async (url: string): Promise<PaginatedResponse<Entry>> => {
   const res = await fetch(url, {
     headers: {
       "Content-Type": "application/json",
     },
   });
+  
   if (!res.ok) {
     if (res.status === 401) {
       useAuthStore.getState().logout();
     }
     throw new Error("An error occurred while fetching the data.");
   }
-  const resJson = await res.json();
-  return resJson.data;
+  
+  return await res.json();
 };
 
 export default function Dashboard() {
@@ -34,17 +45,23 @@ export default function Dashboard() {
   const [showFilters, setShowFilters] = useState(false);
   const [search, setSearch] = useState("");
   const [mood, setMood] = useState<Mood | "">("");
+  const [page, setPage] = useState(1);
 
   const queryParams = new URLSearchParams();
   if (user) queryParams.set("userId", user._id);
   if (search) queryParams.set("search", search);
   if (mood) queryParams.set("mood", mood);
+  queryParams.set("page", page.toString());
+  queryParams.set("limit", "10");
 
-  const { data: entries, isLoading } = useSWR<Entry[]>(
+  const { data, isLoading } = useSWR<PaginatedResponse<Entry>>(
     user ? `/api/entries?${queryParams.toString()}` : null,
-    fetcher
+    fetcher,
+    { keepPreviousData: true }
   );
 
+  const entries = data?.data || [];
+  const meta = data?.meta;
   const moodOptions = Object.values(Mood);
 
   if (!user) {
@@ -109,7 +126,10 @@ export default function Dashboard() {
               placeholder="Search..."
               className="w-full h-12 bg-transparent border-none outline-none text-stone-700 dark:text-stone-200 placeholder-stone-400 dark:placeholder-stone-600 px-4 text-base"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1); // Reset to first page on search
+              }}
             />
 
             {(search || mood) && (
@@ -118,6 +138,7 @@ export default function Dashboard() {
                   setSearch("");
                   setMood("");
                   setShowFilters(false);
+                  setPage(1);
                 }}
                 className="p-2 mr-2 hover:bg-stone-100 dark:hover:bg-stone-800 rounded-full text-stone-400 hover:text-stone-600 dark:text-stone-500 dark:hover:text-stone-300 transition-colors"
               >
@@ -154,7 +175,10 @@ export default function Dashboard() {
                 {moodOptions.map((m) => (
                   <button
                     key={m}
-                    onClick={() => setMood(mood === m ? "" : m)}
+                    onClick={() => {
+                      setMood(mood === m ? "" : m);
+                      setPage(1); // Reset to first page on filter
+                    }}
                     className={cn(
                       "px-4 py-2 rounded-full text-xs font-medium border transition-all",
                       mood === m
@@ -172,14 +196,14 @@ export default function Dashboard() {
       </section>
 
       {/* Grid Content */}
-      {isLoading ? (
+      {isLoading && !data ? (
         <div className="flex flex-col items-center py-24 opacity-60">
           <Loader2 className="w-8 h-8 animate-spin text-stone-400 dark:text-stone-500 mb-3" />
           <span className="text-sm text-stone-400 dark:text-stone-500 font-medium animate-pulse">
             Gathering memories...
           </span>
         </div>
-      ) : !entries || entries.length === 0 ? (
+      ) : entries.length === 0 ? (
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -200,6 +224,7 @@ export default function Dashboard() {
                 onClick={() => {
                   setSearch("");
                   setMood("");
+                  setPage(1);
                 }}
                 className="text-rose-600 dark:text-rose-400 text-sm font-medium hover:underline"
               >
@@ -226,17 +251,55 @@ export default function Dashboard() {
           )}
         </motion.div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
-          <AnimatePresence>
-            {entries.map((entry, index) => (
-              <EntryCard
-                key={entry._id}
-                entry={entry}
-                index={index}
-                onClick={(id) => router.push(`/entry/${id}`)}
-              />
-            ))}
-          </AnimatePresence>
+        <div className="space-y-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <AnimatePresence mode="popLayout">
+              {entries.map((entry, index) => (
+                <EntryCard
+                  key={entry._id}
+                  entry={entry}
+                  index={index}
+                  onClick={(id) => router.push(`/entry/${id}`)}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+
+          {/* Pagination UI */}
+          {meta && meta.totalPages > 1 && (
+            <div className="flex flex-col items-center gap-4 py-8 border-t border-stone-100 dark:border-stone-800">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-2 rounded-xl border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                
+                <div className="flex items-center gap-1 px-4">
+                  <span className="text-sm font-medium text-stone-800 dark:text-stone-200">
+                    Page {page}
+                  </span>
+                  <span className="text-sm text-stone-400 dark:text-stone-600">
+                    of {meta.totalPages}
+                  </span>
+                </div>
+
+                <button
+                  onClick={() => setPage((p) => Math.min(meta.totalPages, p + 1))}
+                  disabled={page === meta.totalPages}
+                  className="p-2 rounded-xl border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <p className="text-xs text-stone-400 dark:text-stone-500 font-medium">
+                Showing {entries.length} of {meta.total} memories
+              </p>
+            </div>
+          )}
         </div>
       )}
     </div>
