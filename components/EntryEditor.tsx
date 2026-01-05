@@ -11,7 +11,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { Clock, AlertTriangle, CheckCircle2, Loader2, Save, XCircle, RefreshCw } from "lucide-react";
+import { Clock, AlertTriangle, CheckCircle2, Loader2, Save, XCircle, RefreshCw, Lock, Globe } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { formatDate, cn } from "@/lib/utils";
@@ -41,7 +41,9 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [mode, setMode] = useState<"write" | "preview">("write");
+  
+  // UX FIX: If entryId exists, default to 'preview'. If new, default to 'write'.
+  const [mode, setMode] = useState<"write" | "preview">(entryId ? "preview" : "write");
   
   const [formData, setFormData] = useState<Partial<Entry>>(
     initialData || {
@@ -56,6 +58,9 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
   const currentEntryIdRef = useRef<string | undefined>(entryId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Ownership Check
+  const isOwner = user && formData.userId ? user._id === formData.userId : !entryId;
 
   // Auto-resize textarea
   useEffect(() => {
@@ -91,7 +96,7 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
   }, [fetchEntry]);
 
   const performSave = useCallback(async (isManual: boolean = false) => {
-    if (loadError) return; // Prevent saving if load failed
+    if (loadError || !isOwner) return; 
     if (!formData.title && !formData.content) return;
     if (!user) return;
 
@@ -110,7 +115,6 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
       } else {
         savedEntry = await createEntry(entryData);
         currentEntryIdRef.current = savedEntry._id;
-        // Keep Next.js router in sync
         router.replace(`/entry/${savedEntry._id}`, { scroll: false });
       }
       
@@ -133,21 +137,18 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
       setSaving(false);
       setIsAutoSaving(false);
     }
-  }, [formData, user, router, loadError]);
+  }, [formData, user, router, loadError, isOwner]);
 
   // Handle Auto-save logic
   useEffect(() => {
-    if (!user || loading || loadError) return;
+    if (!user || loading || loadError || !isOwner || mode === 'preview') return;
 
-    // Check if there's actually content to save
     if (!formData.title && !formData.content) return;
 
-    // Clear existing timer
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);
     }
 
-    // Set new timer for 1000ms
     autoSaveTimerRef.current = setTimeout(() => {
       performSave(false);
     }, 1000);
@@ -157,7 +158,7 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [formData.title, formData.content, formData.mood, formData.tags, formData.visibility, performSave, user, loading, loadError]);
+  }, [formData.title, formData.content, formData.mood, formData.tags, formData.visibility, performSave, user, loading, loadError, isOwner, mode]);
 
   const handleManualSave = () => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -165,7 +166,7 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
   };
 
   const confirmDelete = async () => {
-    if (!currentEntryIdRef.current) return;
+    if (!currentEntryIdRef.current || !isOwner) return;
     setDeleting(true);
     try {
       await deleteEntry(currentEntryIdRef.current);
@@ -197,7 +198,7 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
             <div className="space-y-2">
                 <h3 className="text-xl font-serif font-bold text-stone-800 dark:text-stone-100">Failed to load entry</h3>
                 <p className="text-stone-500 dark:text-stone-400 max-w-xs mx-auto text-sm">
-                    We couldn&apos;t retrieve your journal entry. This might be due to a connection issue.
+                    We couldn&apos;t retrieve your journal entry. This might be due to a connection issue or privacy settings.
                 </p>
             </div>
             <button 
@@ -218,56 +219,88 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
         animate={{ opacity: 1, y: 0 }}
         className="max-w-3xl mx-auto pb-20 relative"
       >
-        <EditorToolbar
-          onSave={handleManualSave}
-          onDelete={currentEntryIdRef.current ? () => setShowDeleteModal(true) : undefined}
-          saving={saving}
-          mode={mode}
-          setMode={setMode}
-          canSave={!!(formData.title || formData.content)}
-          canDelete={!!currentEntryIdRef.current}
-        />
+        {isOwner ? (
+            <EditorToolbar
+                onSave={handleManualSave}
+                onDelete={currentEntryIdRef.current ? () => setShowDeleteModal(true) : undefined}
+                saving={saving}
+                mode={mode}
+                setMode={setMode}
+                canSave={!!(formData.title || formData.content)}
+                canDelete={!!currentEntryIdRef.current}
+            />
+        ) : (
+            <div className="flex items-center justify-between mb-8 sticky top-0 bg-[#FDFCF8]/95 dark:bg-stone-950/95 backdrop-blur-md py-4 z-20 transition-colors">
+                <button
+                    onClick={() => router.push("/")}
+                    className="group flex items-center text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 transition-colors"
+                >
+                    <div className="p-2 rounded-full group-hover:bg-stone-100 dark:group-hover:bg-stone-800 transition-colors mr-1">
+                        <Clock className="w-5 h-5 group-hover:-translate-x-0.5 transition-transform" />
+                    </div>
+                    <span className="text-sm font-medium">Return</span>
+                </button>
+                <div className="flex items-center gap-2 text-stone-400 bg-stone-50 dark:bg-stone-900 px-4 py-1.5 rounded-full text-xs font-medium border border-stone-100 dark:border-stone-800">
+                    <Lock className="w-3 h-3" />
+                    Read Only Mode
+                </div>
+            </div>
+        )}
 
         <div className="space-y-8 px-1 sm:px-0">
           {/* Meta Controls & Status */}
           <div className="flex flex-wrap items-center gap-3 text-sm font-medium animate-in fade-in slide-in-from-top-4 duration-500">
-            <MoodSelector
-              value={formData.mood as Mood}
-              onChange={(mood) => setFormData((prev) => ({ ...prev, mood }))}
-            />
+            {isOwner ? (
+                <>
+                    <MoodSelector
+                    value={formData.mood as Mood}
+                    onChange={(mood) => setFormData((prev) => ({ ...prev, mood }))}
+                    />
 
-            <VisibilitySelector
-              value={formData.visibility as Visibility}
-              onChange={(visibility) =>
-                setFormData((prev) => ({ ...prev, visibility }))
-              }
-            />
+                    <VisibilitySelector
+                    value={formData.visibility as Visibility}
+                    onChange={(visibility) =>
+                        setFormData((prev) => ({ ...prev, visibility }))
+                    }
+                    />
+                </>
+            ) : (
+                <div className="flex items-center gap-2 px-3 py-1 bg-stone-50 dark:bg-stone-900 rounded-full border border-stone-100 dark:border-stone-800">
+                    <span className="text-xl">{formData.mood === 'happy' ? '😊' : formData.mood === 'sad' ? '😢' : formData.mood === 'anxious' ? '😰' : formData.mood === 'excited' ? '🤩' : '😐'}</span>
+                    <span className="text-xs capitalize text-stone-600 dark:text-stone-400">{formData.mood}</span>
+                    <div className="w-px h-3 bg-stone-200 dark:bg-stone-800 mx-1" />
+                    {formData.visibility === 'public' ? <Globe className="w-3 h-3 text-emerald-500" /> : <Lock className="w-3 h-3 text-stone-400" />}
+                    <span className="text-xs capitalize text-stone-600 dark:text-stone-400">{formData.visibility}</span>
+                </div>
+            )}
 
             <div className="ml-auto flex items-center gap-4">
-               {/* Auto-save Status Indicator */}
-              <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-bold">
-                {isAutoSaving ? (
-                  <div className="flex items-center gap-1.5 text-amber-500 dark:text-amber-400">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    <span>Saving...</span>
-                  </div>
-                ) : autoSaveError ? (
-                  <div className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
-                    <XCircle className="w-3 h-3" />
-                    <span>Save Failed</span>
-                  </div>
-                ) : lastSaved ? (
-                  <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 opacity-80">
-                    <CheckCircle2 className="w-3 h-3" />
-                    <span>Saved</span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-1.5 text-stone-400 dark:text-stone-500">
-                    <Save className="w-3 h-3" />
-                    <span>Unsaved</span>
-                  </div>
-                )}
-              </div>
+               {/* Auto-save Status Indicator (Only if owner) */}
+              {isOwner && (
+                  <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider font-bold">
+                    {isAutoSaving ? (
+                    <div className="flex items-center gap-1.5 text-amber-500 dark:text-amber-400">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>Saving...</span>
+                    </div>
+                    ) : autoSaveError ? (
+                    <div className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+                        <XCircle className="w-3 h-3" />
+                        <span>Save Failed</span>
+                    </div>
+                    ) : lastSaved ? (
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 opacity-80">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>Saved</span>
+                    </div>
+                    ) : (
+                    <div className="flex items-center gap-1.5 text-stone-400 dark:text-stone-500">
+                        <Save className="w-3 h-3" />
+                        <span>Unsaved</span>
+                    </div>
+                    )}
+                </div>
+              )}
 
               <div className="text-xs text-stone-400 dark:text-stone-500 flex items-center gap-1.5 bg-stone-50 dark:bg-stone-900 px-3 py-1.5 rounded-full border border-stone-100 dark:border-stone-800">
                 <Clock className="w-3 h-3" />
@@ -277,20 +310,30 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
           </div>
 
           {/* Title Input */}
-          <input
-            type="text"
-            placeholder="Untitled Entry"
-            className="w-full text-4xl sm:text-5xl font-serif font-bold text-stone-800 dark:text-stone-100 placeholder-stone-300 dark:placeholder-stone-700 bg-transparent border-none focus:ring-0 outline-none p-0 tracking-tight"
-            value={formData.title}
-            onChange={(e) =>
-              setFormData((prev) => ({ ...prev, title: e.target.value }))
-            }
-            autoFocus={!entryId}
-          />
+          <h1 className={cn(
+              "w-full text-4xl sm:text-5xl font-serif font-bold text-stone-800 dark:text-stone-100 tracking-tight",
+              mode === 'write' ? "placeholder-stone-300 dark:placeholder-stone-700 outline-none" : ""
+          )}>
+            {mode === 'write' ? (
+                <input
+                    type="text"
+                    placeholder="Untitled Entry"
+                    className="w-full bg-transparent border-none focus:ring-0 p-0"
+                    value={formData.title}
+                    onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, title: e.target.value }))
+                    }
+                    autoFocus={!entryId}
+                    readOnly={!isOwner}
+                />
+            ) : (
+                formData.title || "Untitled Entry"
+            )}
+          </h1>
 
           {/* Content Area */}
           <div className="min-h-[50vh] relative">
-            {mode === "write" ? (
+            {mode === "write" && isOwner ? (
               <textarea
                 ref={textareaRef}
                 placeholder="What's on your mind? (Markdown supported)"
@@ -316,6 +359,7 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
           <TagInput
             tags={formData.tags || []}
             onChange={(tags) => setFormData((prev) => ({ ...prev, tags }))}
+            readOnly={!isOwner || mode === 'preview'}
           />
         </div>
       </motion.div>

@@ -8,16 +8,20 @@ export async function middleware(request: NextRequest) {
   // Public paths that don't require auth
   const isPublicPath = pathname === "/login" || pathname === "/register";
   
-  // Protected paths
-  // We protect /entry/* and the dashboard / (though dashboard handles empty state, strict protection is maybe better, but let's stick to prompt requirements)
-  // The prompt asked to fix security. Preventing access to /entry/* is key.
-  const isProtectedPath = pathname.startsWith("/entry");
-
+  // Potential protected path
+  const isEntryPath = pathname.startsWith("/entry/");
+  
   const token = request.cookies.get("token")?.value || "";
   const payload = token ? await verifyJWT(token) : null;
 
-  // If trying to access protected route without valid token
-  if (isProtectedPath && !payload) {
+  // We allow access to /entry/[id] if the user is logged in, 
+  // and the API handles specific entry-level visibility.
+  // However, we still want to prevent completely unauthenticated access to the UI.
+  // For ZenJournal, we'll allow unauthenticated users to view PUBLIC entries if they have the link.
+  // But wait, our current architecture requires being logged in to even use the AuthProvider.
+  // Let's stick to: Must be logged in to view ANY entry UI, but logged in users can view other's PUBLIC entries.
+
+  if (isEntryPath && !payload) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 

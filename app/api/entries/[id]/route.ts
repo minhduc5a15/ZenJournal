@@ -15,13 +15,19 @@ export async function GET(
   const token = cookieStore.get("token")?.value;
   const payload = token ? await verifyJWT(token) : null;
 
-  if (!payload) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // We find by ID first, then check authorization
+  const entry = await Entry.findById(id);
+  if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  // Authorization Check
+  const isOwner = payload && entry.userId === payload.sub;
+  const isPublic = entry.visibility === 'public';
+
+  if (isPublic || isOwner) {
+    return NextResponse.json(entry);
   }
 
-  const entry = await Entry.findOne({ _id: id, userId: payload.sub });
-  if (!entry) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(entry);
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
 export async function PUT(
