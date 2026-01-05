@@ -45,9 +45,17 @@ export async function GET(request: Request) {
   const mood = searchParams.get("mood");
   const tag = searchParams.get("tag");
   
-  // Pagination Params
-  const page = parseInt(searchParams.get("page") || "1");
-  const limit = parseInt(searchParams.get("limit") || "10");
+  // Pagination Params with safety fallbacks
+  let page = parseInt(searchParams.get("page") || "1");
+  let limit = parseInt(searchParams.get("limit") || "10");
+  
+  if (isNaN(page) || page < 1) page = 1;
+  if (isNaN(limit) || limit < 1) limit = 10;
+  
+  // Cap limit to prevent abuse
+  const MAX_LIMIT = 50;
+  if (limit > MAX_LIMIT) limit = MAX_LIMIT;
+
   const skip = (page - 1) * limit;
 
   // Using the defined interface instead of 'any'

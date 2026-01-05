@@ -11,7 +11,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { Clock, AlertTriangle, CheckCircle2, Loader2, Save, XCircle } from "lucide-react";
+import { Clock, AlertTriangle, CheckCircle2, Loader2, Save, XCircle, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { formatDate, cn } from "@/lib/utils";
@@ -34,6 +34,7 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
   const router = useRouter();
   const { user } = useAuthStore();
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isAutoSaving, setIsAutoSaving] = useState(false);
   const [autoSaveError, setAutoSaveError] = useState(false);
@@ -65,21 +66,32 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
     }
   }, [formData.content, mode]);
 
-  useEffect(() => {
+  const fetchEntry = useCallback(async () => {
     if (entryId && !initialData) {
       setLoading(true);
-      getEntry(entryId)
-        .then((entry) => {
-          if (entry) {
-            setFormData(entry);
-            setLastSaved(new Date(entry.updatedAt));
-          }
-        })
-        .finally(() => setLoading(false));
+      setLoadError(false);
+      try {
+        const entry = await getEntry(entryId);
+        if (entry) {
+          setFormData(entry);
+          setLastSaved(new Date(entry.updatedAt));
+        } else {
+            setLoadError(true);
+        }
+      } catch (error) {
+        setLoadError(true);
+      } finally {
+        setLoading(false);
+      }
     }
   }, [entryId, initialData]);
 
+  useEffect(() => {
+    fetchEntry();
+  }, [fetchEntry]);
+
   const performSave = useCallback(async (isManual: boolean = false) => {
+    if (loadError) return; // Prevent saving if load failed
     if (!formData.title && !formData.content) return;
     if (!user) return;
 
@@ -121,11 +133,11 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
       setSaving(false);
       setIsAutoSaving(false);
     }
-  }, [formData, user, router]);
+  }, [formData, user, router, loadError]);
 
   // Handle Auto-save logic
   useEffect(() => {
-    if (!user || loading) return;
+    if (!user || loading || loadError) return;
 
     // Check if there's actually content to save
     if (!formData.title && !formData.content) return;
@@ -145,7 +157,7 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
         clearTimeout(autoSaveTimerRef.current);
       }
     };
-  }, [formData.title, formData.content, formData.mood, formData.tags, formData.visibility, performSave, user, loading]);
+  }, [formData.title, formData.content, formData.mood, formData.tags, formData.visibility, performSave, user, loading, loadError]);
 
   const handleManualSave = () => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -175,6 +187,29 @@ export const EntryEditor: React.FC<EntryEditorProps> = ({
         </span>
       </div>
     );
+
+  if (loadError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-[50vh] text-center space-y-6">
+            <div className="w-16 h-16 rounded-full bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center text-rose-600 dark:text-rose-400">
+                <AlertTriangle className="w-8 h-8" />
+            </div>
+            <div className="space-y-2">
+                <h3 className="text-xl font-serif font-bold text-stone-800 dark:text-stone-100">Failed to load entry</h3>
+                <p className="text-stone-500 dark:text-stone-400 max-w-xs mx-auto text-sm">
+                    We couldn&apos;t retrieve your journal entry. This might be due to a connection issue.
+                </p>
+            </div>
+            <button 
+                onClick={fetchEntry}
+                className="inline-flex items-center gap-2 bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-6 py-2.5 rounded-full font-medium hover:bg-stone-800 dark:hover:bg-stone-200 transition-all active:scale-95 shadow-lg shadow-stone-200 dark:shadow-none"
+            >
+                <RefreshCw className="w-4 h-4" />
+                Retry Loading
+            </button>
+        </div>
+      )
+  }
 
   return (
     <>
